@@ -6,6 +6,7 @@ import argparse
 
 import torch.nn.functional as F
 
+import guided_diffusion
 from guided_diffusion import dist_util, logger
 from guided_diffusion.image_datasets import load_data
 from guided_diffusion.resample import create_named_schedule_sampler
@@ -14,12 +15,13 @@ from guided_diffusion.script_util import (
     sr_create_model_and_diffusion,
     args_to_dict,
     add_dict_to_argparser,
+    add_dict_to_argparser,
 )
 from guided_diffusion.train_util import TrainLoop
 
-
 def main():
     args = create_argparser().parse_args()
+    print(args)
 
     dist_util.setup_dist()
     logger.configure()
