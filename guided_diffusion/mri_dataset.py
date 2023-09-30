@@ -116,7 +116,6 @@ class MRIDataset(Dataset):
         print(img.shape)
         return img
 
-
 def center_crop_arr(img, target_shape):
     # crops image_size from pil_image.size, only for 2d images
     img_shape = img.shape
