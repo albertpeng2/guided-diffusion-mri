@@ -3,12 +3,16 @@ Train a super-resolution model.
 """
 
 import argparse
+import sys
+import numpy as np
+sys.path.insert(0, "../")
 
 import torch.nn.functional as F
 
 import guided_diffusion
 from guided_diffusion import dist_util, logger
-from guided_diffusion.image_datasets import load_data
+# from guided_diffusion.image_datasets import load_data
+from guided_diffusion.mri_dataset import load_data
 from guided_diffusion.resample import create_named_schedule_sampler
 from guided_diffusion.script_util import (
     sr_model_and_diffusion_defaults,
@@ -34,13 +38,19 @@ def main():
     schedule_sampler = create_named_schedule_sampler(args.schedule_sampler, diffusion)
 
     logger.log("creating data loader...")
+    # original
+    # data = load_superres_data(
+    #     args.data_dir,
+    #     args.batch_size,
+    #     large_size=args.large_size,
+    #     small_size=args.small_size,
+    #     class_cond=args.class_cond,
+    # )
     data = load_superres_data(
-        args.data_dir,
-        args.batch_size,
-        large_size=args.large_size,
-        small_size=args.small_size,
-        class_cond=args.class_cond,
+        batch_size = args.batch_size,
+        small_size = (128, 128)
     )
+
 
     logger.log("training...")
     TrainLoop(
@@ -61,14 +71,21 @@ def main():
         lr_anneal_steps=args.lr_anneal_steps,
     ).run_loop()
 
+# original
+# def load_superres_data(data_dir, batch_size, large_size, small_size, class_cond=False):
+#     data = load_data(
+#         data_dir=data_dir,
+#         batch_size=batch_size,
+#         image_size=large_size,
+#         class_cond=class_cond,
+#     )
+#     for large_batch, model_kwargs in data:
+#         model_kwargs["low_res"] = F.interpolate(large_batch, small_size, mode="area")
+#         yield large_batch, model_kwargs
+#
 
-def load_superres_data(data_dir, batch_size, large_size, small_size, class_cond=False):
-    data = load_data(
-        data_dir=data_dir,
-        batch_size=batch_size,
-        image_size=large_size,
-        class_cond=class_cond,
-    )
+def load_superres_data(batch_size, small_size, class_cond=False):
+    data = load_data([], batch_size)
     for large_batch, model_kwargs in data:
         model_kwargs["low_res"] = F.interpolate(large_batch, small_size, mode="area")
         yield large_batch, model_kwargs
@@ -81,7 +98,7 @@ def create_argparser():
         lr=1e-4,
         weight_decay=0.0,
         lr_anneal_steps=0,
-        batch_size=1,
+        batch_size=16,
         microbatch=-1,
         ema_rate="0.9999",
         log_interval=10,
