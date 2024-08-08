@@ -12,6 +12,7 @@ from . import dist_util, logger
 from .fp16_util import MixedPrecisionTrainer
 from .nn import update_ema
 from .resample import LossAwareSampler, UniformSampler
+import wandb
 
 # For ImageNet experiments, this was a good default value.
 # We found that the lg_loss_scale quickly climbed to
@@ -156,7 +157,7 @@ class TrainLoop:
             or self.step + self.resume_step < self.lr_anneal_steps
         ):
             batch, cond = next(iter(self.data))
-
+            
             self.run_step(batch, cond)
             if self.step % self.log_interval == 0:
                 logger.dumpkvs()
@@ -210,7 +211,7 @@ class TrainLoop:
 
             loss = (losses["loss"] * weights).mean()
             log_loss_dict(
-                self.diffusion, t, {k: v * weights for k, v in losses.items()}
+                self.diffusion, t, {k: v * weights for k, v in losses.items()}, self.step
             )
             self.mp_trainer.backward(loss)
 
@@ -293,9 +294,12 @@ def find_ema_checkpoint(main_checkpoint, step, rate):
     return None
 
 
-def log_loss_dict(diffusion, ts, losses):
+def log_loss_dict(diffusion, ts, losses, step):
     for key, values in losses.items():
         logger.logkv_mean(key, values.mean().item())
+        if dist.get_rank() == 0:
+            wandb.log({key: values.mean().item()}, step=step)
+        
         # Log the quantiles (four quartiles, in particular).
         for sub_t, sub_loss in zip(ts.cpu().numpy(), values.detach().cpu().numpy()):
             quartile = int(4 * sub_t / diffusion.num_timesteps)

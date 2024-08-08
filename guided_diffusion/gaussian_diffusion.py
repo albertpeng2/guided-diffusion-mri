@@ -123,6 +123,7 @@ class GaussianDiffusion:
         model_var_type,
         loss_type,
         rescale_timesteps=False,
+        beta_scale=1.0
     ):
         self.model_mean_type = model_mean_type
         self.model_var_type = model_var_type
@@ -136,6 +137,8 @@ class GaussianDiffusion:
         assert (betas > 0).all() and (betas <= 1).all()
 
         self.num_timesteps = int(betas.shape[0])
+        self.beta_scale = beta_scale
+        print(f"beta scale; {beta_scale}")
 
         alphas = 1.0 - betas
         self.alphas_cumprod = np.cumprod(alphas, axis=0)
@@ -197,7 +200,7 @@ class GaussianDiffusion:
         :return: A noisy version of x_start.
         """
         if noise is None:
-            noise = th.randn_like(x_start)
+            noise = self.beta_scale * th.randn_like(x_start)
         assert noise.shape == x_start.shape
         return (
             _extract_into_tensor(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
@@ -427,7 +430,7 @@ class GaussianDiffusion:
             denoised_fn=denoised_fn,
             model_kwargs=model_kwargs,
         )
-        noise = th.randn_like(x)
+        noise = self.beta_scale * th.randn_like(x)
         nonzero_mask = (
             (t != 0).float().view(-1, *([1] * (len(x.shape) - 1)))
         )  # no noise when t == 0
@@ -448,7 +451,7 @@ class GaussianDiffusion:
         cond_fn=None,
         model_kwargs=None,
         device=None,
-        progress=False,
+        progress=True,
     ):
         """
         Generate samples from the model.
@@ -510,7 +513,7 @@ class GaussianDiffusion:
         if noise is not None:
             img = noise
         else:
-            img = th.randn(*shape, device=device)
+            img = self.beta_scale * th.randn(*shape, device=device)
         indices = list(range(self.num_timesteps))[::-1]
 
         if progress:
@@ -573,7 +576,7 @@ class GaussianDiffusion:
             * th.sqrt(1 - alpha_bar / alpha_bar_prev)
         )
         # Equation 12.
-        noise = th.randn_like(x)
+        noise = self.beta_scale * th.randn_like(x)
         mean_pred = (
             out["pred_xstart"] * th.sqrt(alpha_bar_prev)
             + th.sqrt(1 - alpha_bar_prev - sigma ** 2) * eps
@@ -757,7 +760,7 @@ class GaussianDiffusion:
         if model_kwargs is None:
             model_kwargs = {}
         if noise is None:
-            noise = th.randn_like(x_start)
+            noise = self.beta_scale * th.randn_like(x_start)
         x_t = self.q_sample(x_start, t, noise=noise)
 
         terms = {}

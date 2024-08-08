@@ -2,3 +2,12 @@
 __pycache__/
 classify_image_graph_def.pb
 ./testing
+logs/
+*.err
+*.out
+*.pt
+*.csv
+*.txt
+*.log
+*.json
+*.wandb

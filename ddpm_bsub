@@ -1,0 +1,18 @@
+#BSUB -R 'select[type==any]'
+#BSUB -e %J.err
+#BSUB -o %J.out
+#  -gpu "num=1:gmodel=NVIDIAA100_SXM4_80GB:mode=exclusive_process"
+#BSUB -gpu "num=2:mode=exclusive_process"
+#BSUB -m "a100-2207"
+#BSUB -N
+#BSUB -u albertpeng@wustl.edu
+#BSUB -q "gpu-compute"
+#BSUB -J ddpm_con_2gpu_test
+
+source ~/miniconda3/bin/activate
+conda activate py310
+
+mpiexec -n 4 /project/cigserver5/export/a.peng/anaconda3/envs/diffusion/bin/python /project/cigserver5/export1/a.peng/guided-diffusion-mri/image_train.py \
+--name ddpm-test \
+--batch_size 4 --beta_scale 0.10
+

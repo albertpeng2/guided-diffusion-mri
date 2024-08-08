@@ -5,11 +5,7 @@ Train a super-resolution model.
 import argparse
 import sys, os
 import numpy as np
-sys.path.insert(0, "../../")
-root_path = os.path.dirname(os.path.abspath(sys.argv[0]))
-print("Root path:", root_path)
-root_path = os.path.dirname(os.path.abspath(__file__))
-print("Root path:", root_path)
+sys.path.insert(0, "../")
 
 import torch.nn.functional as F
 
@@ -33,7 +29,7 @@ def main():
     print(args)
 
     dist_util.setup_dist()
-    logger.configure()
+    logger.configure(args=args)
 
     logger.log("creating model...")
     model, diffusion = sr_create_model_and_diffusion(
@@ -46,13 +42,15 @@ def main():
     data = load_superres_data(
         batch_size = args.batch_size,
         small_size = (128, 128),
-        accleleration=args.acceleration,
-        croped=args.cropped,
+        class_cond=False,
+        acceleration=args.acceleration,
+        cropped=args.cropped,
         input_type=args.input_type
     )
 
 
     logger.log("training...")
+
     TrainLoop(
         model=model,
         diffusion=diffusion,
@@ -85,12 +83,15 @@ def main():
 #
 
 def load_superres_data(batch_size, small_size, class_cond=False, acceleration=8, cropped=True, input_type="raw"):
-    dataset = RealMeasurement(idx_list=range(1, 1300), acceleration=acceleration, is_return_y_smps_hat = True, cropped = cropped, input_type=input_type)
+    dataset = RealMeasurement(idx_list=range(1, 1300), acceleration_rate=acceleration, is_return_y_smps_hat = True, cropped = cropped, input_type=input_type)
     loader = DataLoader(
         dataset=dataset, batch_size=batch_size, shuffle=True, num_workers=2
     )
-    for large_batch, model_kwargs in loader:
-        yield large_batch, model_kwargs
+    # for large_batch, model_kwargs in loader:
+    #     # model_kwargs["low_res"] = F.interpolate(large_batch, small_size, mode="area")
+    #     yield large_batch, model_kwargs
+    while True:
+        yield from loader
 
 
 def create_argparser():
@@ -103,7 +104,7 @@ def create_argparser():
         lr=1e-4,
         weight_decay=0.0,
         lr_anneal_steps=0,
-        batch_size=16,
+        batch_size=4,
         microbatch=-1,
         ema_rate="0.9999",
         log_interval=10,
@@ -111,7 +112,12 @@ def create_argparser():
         resume_checkpoint="",
         use_fp16=False,
         fp16_scale_growth=1e-3,
+        wandb_api_key="fe47e48c41d8c2349446e130f510040c843ae8de",
+        wandb_user="albertpeng2",
+        name="ddpm",
+        beta_scale=0.1
     )
+    
     defaults.update(sr_model_and_diffusion_defaults())
     parser = argparse.ArgumentParser()
     add_dict_to_argparser(parser, defaults)

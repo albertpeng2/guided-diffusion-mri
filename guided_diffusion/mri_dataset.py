@@ -110,7 +110,7 @@ class MRIDataset(Dataset):
         #print(f"img shape: {norm_sampled_img.shape}")
         # save_image(norm_sampled_img, "sampled_img.png")
 
-        out_dict = {"y": np.array(norm_sampled_img, dtype=np.int64)}
+        out_dict = {"masked_img": np.array(norm_sampled_img, dtype=np.int64)}
 
         return img, out_dict
 

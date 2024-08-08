@@ -5,14 +5,15 @@ Train a diffusion model on images.
 import argparse
 
 from guided_diffusion import dist_util, logger
-from guided_diffusion.image_datasets import load_data
 from guided_diffusion.resample import create_named_schedule_sampler
+from guided_diffusion.pmri_fastmri_brain import RealMeasurement
 from guided_diffusion.script_util import (
     model_and_diffusion_defaults,
     create_model_and_diffusion,
     args_to_dict,
     add_dict_to_argparser,
 )
+from torch.utils.data import DataLoader, Dataset
 from guided_diffusion.train_util import TrainLoop
 
 
@@ -20,7 +21,7 @@ def main():
     args = create_argparser().parse_args()
 
     dist_util.setup_dist()
-    logger.configure()
+    logger.configure(args=args)
 
     logger.log("creating model and diffusion...")
     model, diffusion = create_model_and_diffusion(
@@ -30,11 +31,25 @@ def main():
     schedule_sampler = create_named_schedule_sampler(args.schedule_sampler, diffusion)
 
     logger.log("creating data loader...")
+    # data = load_data(
+    #     data_dir=args.data_dir,
+    #     batch_size=args.batch_size,
+    #     image_size=args.image_size,
+    #     class_cond=args.class_cond,
+    # )
+    def load_data(batch_size,  acceleration=8, cropped=True, input_type="raw"):
+        dataset = RealMeasurement(idx_list=range(1, 1300), acceleration_rate=acceleration, is_return_y_smps_hat = True, cropped = cropped, input_type=input_type, condition=False)
+        loader = DataLoader(
+            dataset=dataset, batch_size=batch_size, shuffle=True, num_workers=2
+        )
+        while True:
+            yield from loader
+            
     data = load_data(
-        data_dir=args.data_dir,
-        batch_size=args.batch_size,
-        image_size=args.image_size,
-        class_cond=args.class_cond,
+        batch_size = args.batch_size,
+        acceleration=args.acceleration,
+        cropped=args.cropped,
+        input_type=args.input_type
     )
 
     logger.log("training...")
@@ -59,6 +74,9 @@ def main():
 
 def create_argparser():
     defaults = dict(
+        acceleration=8,
+        cropped=True,
+        input_type="raw",
         data_dir="",
         schedule_sampler="uniform",
         lr=1e-4,
@@ -72,6 +90,10 @@ def create_argparser():
         resume_checkpoint="",
         use_fp16=False,
         fp16_scale_growth=1e-3,
+        wandb_api_key="fe47e48c41d8c2349446e130f510040c843ae8de",
+        wandb_user="albertpeng2",
+        name="ddpm",
+        beta_scale=0.10
     )
     defaults.update(model_and_diffusion_defaults())
     parser = argparse.ArgumentParser()

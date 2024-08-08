@@ -4,6 +4,7 @@ import inspect
 from . import gaussian_diffusion as gd
 from .respace import SpacedDiffusion, space_timesteps
 from .unet import SuperResModel, UNetModel, EncoderUNetModel
+import torch
 
 NUM_CLASSES = 1000
 
@@ -60,6 +61,7 @@ def model_and_diffusion_defaults():
         resblock_updown=False,
         use_fp16=False,
         use_new_attention_order=False,
+        beta_scale=0.10
     )
     res.update(diffusion_defaults())
     return res
@@ -95,6 +97,7 @@ def create_model_and_diffusion(
     resblock_updown,
     use_fp16,
     use_new_attention_order,
+    beta_scale,
 ):
     model = create_model(
         image_size,
@@ -123,6 +126,7 @@ def create_model_and_diffusion(
         rescale_timesteps=rescale_timesteps,
         rescale_learned_sigmas=rescale_learned_sigmas,
         timestep_respacing=timestep_respacing,
+        beta_scale=beta_scale
     )
     return model, diffusion
 
@@ -165,9 +169,9 @@ def create_model(
 
     return UNetModel(
         image_size=image_size,
-        in_channels=3,
+        in_channels=2,
         model_channels=num_channels,
-        out_channels=(3 if not learn_sigma else 6),
+        out_channels=(2 if not learn_sigma else 4),
         num_res_blocks=num_res_blocks,
         attention_resolutions=tuple(attention_ds),
         dropout=dropout,
@@ -268,7 +272,7 @@ def create_classifier(
 
 def sr_model_and_diffusion_defaults():
     res = model_and_diffusion_defaults()
-    res["large_size"] = 256
+    res["large_size"] = 320
     res["small_size"] = 64
     arg_names = inspect.getfullargspec(sr_create_model_and_diffusion)[0]
     for k in res.copy().keys():
@@ -300,6 +304,7 @@ def sr_create_model_and_diffusion(
     use_scale_shift_norm,
     resblock_updown,
     use_fp16,
+    beta_scale,
 ):
     model = sr_create_model(
         large_size,
@@ -327,6 +332,7 @@ def sr_create_model_and_diffusion(
         rescale_timesteps=rescale_timesteps,
         rescale_learned_sigmas=rescale_learned_sigmas,
         timestep_respacing=timestep_respacing,
+        beta_scale=beta_scale
     )
     return model, diffusion
 
@@ -352,6 +358,8 @@ def sr_create_model(
 
     if large_size == 512:
         channel_mult = (1, 1, 2, 2, 4, 4)
+    elif large_size == 320:
+        channel_mult = (1, 1, 2, 2, 4, 4)
     elif large_size == 256:
         channel_mult = (1, 1, 2, 2, 4, 4)
     elif large_size == 64:
@@ -365,9 +373,9 @@ def sr_create_model(
 
     return SuperResModel(
         image_size=large_size,
-        in_channels=3,
+        in_channels=2,
         model_channels=num_channels,
-        out_channels=(3 if not learn_sigma else 6),
+        out_channels=(2 if not learn_sigma else 4),
         num_res_blocks=num_res_blocks,
         attention_resolutions=tuple(attention_ds),
         dropout=dropout,
@@ -394,6 +402,7 @@ def create_gaussian_diffusion(
     rescale_timesteps=False,
     rescale_learned_sigmas=False,
     timestep_respacing="",
+    beta_scale=1.0
 ):
     betas = gd.get_named_beta_schedule(noise_schedule, steps)
     if use_kl:
@@ -421,6 +430,7 @@ def create_gaussian_diffusion(
         ),
         loss_type=loss_type,
         rescale_timesteps=rescale_timesteps,
+        beta_scale=beta_scale,
     )
 
 
@@ -450,3 +460,28 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError("boolean value expected")
+    
+def compare_psnr(img_test, img_true):
+
+    if img_test.shape != img_true.shape:
+        print(f"img_test shape: {img_test.shape}")
+        print(f"img_true shape: {img_true.shape}")
+        assert img_test.shape == img_true.shape
+
+    if len(img_test.shape) == 4:
+        ## [batch, channel(2), height, width]
+        img_test = torch.sqrt(torch.sum((img_test ** 2), dim=1))
+        img_true = torch.sqrt(torch.sum((img_true ** 2), dim=1))
+
+        # shape = [batch, height, width]
+        for i in range(img_test.shape[0]):
+            img_test[i, :] = (img_test[i, :] - (torch.min(img_test[i, :]))) / (torch.max(img_test[i, :]) - torch.min(img_test[i, :] + +1e-8))
+            img_true[i, :] = (img_true[i, :] - (torch.min(img_true[i, :]))) / (torch.max(img_true[i, :]) - torch.min(img_true[i, :] + +1e-8))
+
+        mse = torch.mean((img_test - img_true) ** 2, dim=(-1, -2))
+
+        psnrs = 10 * torch.log10(1.0 / mse)
+
+        psnr_avg = torch.mean(psnrs)
+
+        return psnr_avg

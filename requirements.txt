@@ -11,5 +11,5 @@ pillow~=10.0.1
 setuptools~=68.0.0
 requests~=2.31.0
 scipy~=1.10.1
-mpi4py~=3.1.4
+# mpi4py~=3.1.4
 torchvision~=0.15.2

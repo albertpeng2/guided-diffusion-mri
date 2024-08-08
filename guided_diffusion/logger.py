@@ -14,6 +14,7 @@ import tempfile
 import warnings
 from collections import defaultdict
 from contextlib import contextmanager
+import wandb
 
 DEBUG = 10
 INFO = 20
@@ -71,6 +72,7 @@ class HumanOutputFormat(KVWriter, SeqWriter):
                 "| %s%s | %s%s |"
                 % (key, " " * (keywidth - len(key)), val, " " * (valwidth - len(val)))
             )
+            
         lines.append(dashes)
         self.file.write("\n".join(lines) + "\n")
 
@@ -334,13 +336,15 @@ class Logger(object):
     # So that you can still log to the terminal without setting up any output files
     CURRENT = None  # Current logger being used by the free functions above
 
-    def __init__(self, dir, output_formats, comm=None):
+    def __init__(self, dir, output_formats, comm=None, args=None):
         self.name2val = defaultdict(float)  # values this iteration
         self.name2cnt = defaultdict(int)
         self.level = INFO
         self.dir = dir
         self.output_formats = output_formats
         self.comm = comm
+        self.args = args
+            
 
     # Logging API, forwarded
     # ----------------------------------------
@@ -439,15 +443,19 @@ def mpi_weighted_mean(comm, local_name2valcount):
         return {}
 
 
-def configure(dir=None, format_strs=None, comm=None, log_suffix=""):
+def configure(dir=None, format_strs=None, comm=None, log_suffix="", args=None):
     """
     If comm is provided, average all numerical stats across that comm
     """
     if dir is None:
         dir = os.getenv("OPENAI_LOGDIR")
     if dir is None:
+        # dir = osp.join(
+        #     tempfile.gettempdir(),
+        #     datetime.datetime.now().strftime("openai-%Y-%m-%d-%H-%M-%S-%f"),
+        # )
         dir = osp.join(
-            tempfile.gettempdir(),
+            "./logs/",
             datetime.datetime.now().strftime("openai-%Y-%m-%d-%H-%M-%S-%f"),
         )
     assert isinstance(dir, str)
@@ -465,8 +473,13 @@ def configure(dir=None, format_strs=None, comm=None, log_suffix=""):
             format_strs = os.getenv("OPENAI_LOG_FORMAT_MPI", "log").split(",")
     format_strs = filter(None, format_strs)
     output_formats = [make_output_format(f, dir, log_suffix) for f in format_strs]
+    
+    if (args) and hasattr(args, 'wandb_api_key') and rank == 0:
+        assert wandb.login(key=args.wandb_api_key)
+        print(f"log in ")
+        wandb.init(dir=str(dir), project="ddpm", entity=args.wandb_user, name=args.name, config=vars(args))
 
-    Logger.CURRENT = Logger(dir=dir, output_formats=output_formats, comm=comm)
+    Logger.CURRENT = Logger(dir=dir, output_formats=output_formats, comm=comm, args=args)
     if output_formats:
         log("Logging to %s" % dir)
 
